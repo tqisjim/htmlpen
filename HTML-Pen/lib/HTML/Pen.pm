@@ -47,7 +47,7 @@ sub new {
 	$pen ||= {} ;
 	$path ||= $pen->{request} ;
 
-	my @path = fromFQPath( $path ) ;
+	my @path = from_fq_path( $path ) ;
 
 	## special variables $DOCS && $follow are historical
 	$pen->{path} ||= $path[0] ;
@@ -60,16 +60,16 @@ sub new {
 	}
 
 sub defaultdocs {
-	return filePath( @_ ) ;
+	return file_path( @_ ) ;
 	}
 
-sub filePath {
+sub file_path {
 	return join '/', @_ if $_[0] =~ m|^/| ;
 	return join '/', $pen->{path}, @_ ;
 	}
 
-sub fromFQPath {
-	my @path = split m|/|, pathHack( $_[0] ) ;
+sub from_fq_path {
+	my @path = split m|/|, path_hack( $_[0] ) ;
 	my $fn = pop @path ;
 	my $path = join '/', @path ;
 	return ( $path, $fn ) ;
@@ -82,15 +82,15 @@ sub include {
 	## hopefully something else barks first...
 	return if scalar @fh > 40 ;
 
-	$fn = filePath( $fn ) ;
+	$fn = file_path( $fn ) ;
 
-	my $fh = new FileHandle pathHack( $fn ) ;
+	my $fh = new FileHandle path_hack( $fn ) ;
 	return $err || '' unless defined $fh ;
 	push @fh, $fh ;
 
 	scalar <$fh> while ( $skip-- ) ;
 	while (<$fh>) {
-		&parseLine( $_ ) ;
+		&parse_line( $_ ) ;
 		}
 
 	pop @fh ;
@@ -100,17 +100,17 @@ sub include {
 
 sub do {
 	my $fn = shift ;
-	$fn = filePath( $fn ) ;
+	$fn = file_path( $fn ) ;
 	do $fn ;
 	return @_? $@ || $!: undef ;
 	}
 
 ## Given a symlink: ln -s /tmp/foobar foo/bar
 ## 'foo/bar/..' may resolve to '/tmp' instead of 'foo'
-## pathHack explicitly performs the following conversion:
+## path_hack explicitly performs the following conversion:
 ## /the/quick/../brown/fox  =>  /the/brown/fox
 
-sub pathHack {
+sub path_hack {
 	my $path = shift ;
 
 	my @tokens = ( '' ) ;
@@ -129,7 +129,7 @@ sub pathHack {
 	return join '', @rv ;
 	}
 
-sub innerParse {
+sub inner_parse {
 	my $html = shift ;
 
 	my @perlfun = HTML::Pen::Utils::split( $html, '&[a-zA-Z0-9_:]*\(' ) ;
@@ -176,7 +176,7 @@ sub innerParse {
 	return @out ;
 	}
 
-sub parseLine {
+sub parse_line {
 	$T3 = shift ;
 
 	return if $skipct-- ;
@@ -185,7 +185,7 @@ sub parseLine {
 	$skipct = 0 ;
 
 	while ( $T3 ) {
-		( $T1, $T2, $T3 ) = innerParse( $T3 ) ;
+		( $T1, $T2, $T3 ) = inner_parse( $T3 ) ;
 
 		print $T1 ;
 		my $noembed = $T2->[0][0] =~ /<\s*:/ 
@@ -201,7 +201,6 @@ sub parseLine {
 					sprintf( "&%s( %s )", @t[ 1, 2 ] ):
 					$t[2] ) 
 					if $t[1] || $t[2] ;
-			warn $_ for grep $_, $@ ;
 			}
 		}
 	}
@@ -219,39 +218,42 @@ sub eval {
 
 sub evaluate {
 	my $rv = eval join "\n", $evalhead, @_ ;
-	logError( $@ ) ;
+	log_error( join "\n\t", @_, $_ ) for grep $_, $@ ;
 	return $rv || $undef ;
 	}
 
-sub evalError {
+sub eval_error {
 	my $rv = eval join "\n", $evalhead, @_ ;
-	evalError( $@ ) ;
+	eval_error( $@ ) ;
 	return $@ || $rv || $undef ;
 	}
 
-sub logError {
-	my $error = shift ;
+my $fh ;
+
+sub log_error {
+	my( $error ) = @_ ;
 	return unless $error && $pen->{errorlog} ;
 
-	my $fh ;
-	open $fh, '>> ' .$pen->{errorlog} or return ;
+	unless ( $fh ) {
+		my $how = ref $pen->{errorlog} ? '>&' : '>>' ;
+		open $fh, $how, $pen->{errorlog} or return ;
+		}
+	
 	print $fh $error ;
-	close $fh ;
 	return ;
 	}
 
-sub evalBlock {
+sub eval_block {
 	evaluate( @_ ) ;
 	return undef ;
 	}
 
 sub evalblock {
-	return evalBlock( @_ ) ;
+	return eval_block( @_ ) ;
 	}
 
-sub undef {
-	evaluate( @_ ) ;
-	return undef ;
+sub _ {
+	return '' ;
 	}
 
 sub comment {
@@ -276,11 +278,11 @@ sub encode {
 	}
 
 sub printf {
-	map { printf $T3, isRefType( $_ => 'ARRAY' )? @$_: $_ } @_ ;
+	map { printf $T3, is_ref_type( $_ => 'ARRAY' )? @$_: $_ } @_ ;
 	return comment() ;
 	}
 
-sub isRefType {
+sub is_ref_type {
 	my $ref = shift ;
 	my $type = shift ;
 
@@ -307,10 +309,10 @@ sub block {
 		local( *glob ) = $ref ;
 		$arrayref = \@glob ;
 		}
-	elsif ( isRefType( $ref => 'ARRAY' ) ) {
+	elsif ( is_ref_type( $ref => 'ARRAY' ) ) {
 		$arrayref = $ref ;
 		}
-	elsif ( isRefType( $ref => 'SCALAR' ) ) {
+	elsif ( is_ref_type( $ref => 'SCALAR' ) ) {
 		$arrayref = $$ref = [] ;
 		}
 	else {
@@ -327,13 +329,13 @@ sub block {
 	return comment() ;
 	}
 
-sub evalLine {
+sub eval_line {
 	eval( $T3 ) ;
 	return comment() ;
 	}
 
 sub evalline {
-	return evalLine( @_ ) ;
+	return eval_line( @_ ) ;
 	}
 
 sub script {
@@ -343,28 +345,28 @@ sub script {
 
 	my $block = [] ;
 	block( $block, $blockend ) ;
-	return evalBlock( @$block ) ;
+	return eval_block( @$block ) ;
 	}
 
-sub displayBlock {
+sub display_block {
         local( $T1, $T2, $T3 ) ;
-	map { parseLine( $_ ) } @_ ;
+	map { parse_line( $_ ) } @_ ;
 	return undef ;
 	}
 
 sub displayblock {
-	return displayBlock( @_ ) ;
+	return display_block( @_ ) ;
 	}
 
-sub loadBlock {
-	my $scalarref = isRefType( $_[0] => 'SCALAR' )? shift @_:  undef ;
+sub load_block {
+	my $scalarref = is_ref_type( $_[0] => 'SCALAR' )? shift @_:  undef ;
 	my $out ;
 
 	my $fh = eval { return *H } ;
  	open( $fh, '>', $scalarref? $scalarref: \$out ) ;
 	my $stdout = select $fh ;
 
-	displayBlock( @_ ) ;
+	display_block( @_ ) ;
 
 	select $stdout ;
 	close $fh ;
@@ -372,17 +374,17 @@ sub loadBlock {
 	}
 
 sub loadblock {
-	return loadBlock( @_ ) ;
+	return load_block( @_ ) ;
 	}
 
-sub mailBlock {
+sub mail_block {
 	return unless $pen->{mailprogram} ;
 
 	my $fh = eval { return *H } ;
  	open( $fh, '|', $pen->{mailprogram} ) ;
 	my $stdout = select $fh ;
 
-	displayBlock( @_ ) ;
+	display_block( @_ ) ;
 
 	select $stdout ;
 	close $fh ;
@@ -390,16 +392,16 @@ sub mailBlock {
 	}
 
 sub mailblock {
-	return loadBlock( @_ ) ;
+	return load_block( @_ ) ;
 	}
 
 ## TODO:
-sub emailBlock {
+sub email_block {
 #	my $fh = eval { return *H } ;
 #	open $fh, "| $sendmail -t" ;
 #	my $stdout = select $fh ;
 
-	displayBlock( @_ ) ;
+	display_block( @_ ) ;
 
 #	select $stdout ;
 #	close $fh ;
@@ -407,7 +409,7 @@ sub emailBlock {
 	}
 
 sub emailblock {
-	return emailBlock( @_ ) ;
+	return email_block( @_ ) ;
 	}
 
 sub iterator {
@@ -419,7 +421,7 @@ sub iterator {
 	local( *glob ) = $globarg ;
 
 	if ( ! @_ ) {}
-	elsif ( @_ == 1 && isRefType( $_[0] => 'ARRAY' ) ) {
+	elsif ( @_ == 1 && is_ref_type( $_[0] => 'ARRAY' ) ) {
 		@glob = @{ $_[0] } ;
 		}
 	else {
@@ -437,22 +439,22 @@ sub iterate {
 
 	use vars qw( @glob $glob ) ;
 	local( *glob ) = $globarg ;
-	return undef unless isRefType( $glob => 'ARRAY' ) ;
+	return undef unless is_ref_type( $glob => 'ARRAY' ) ;
 
 	my @elements = @$glob ;
-	my @block = @_ == 1 && isRefType( $_[0] => 'ARRAY' )? @{ $_[0] }: @_ ;
+	my @block = @_ == 1 && is_ref_type( $_[0] => 'ARRAY' )? @{ $_[0] }: @_ ;
 
 	foreach my $element ( @elements ) {
 		foreach ( @block ) {
 			$glob = $element ;
-			parseLine( $_ ) ;
+			parse_line( $_ ) ;
 			}
 		}
 
 	return undef ;
 	}
 
-sub iteratorValue {
+sub iterator_value {
 	my $iterator = shift ;
 	my $key = shift ;
 	my $ref = $iterator ;
@@ -463,10 +465,10 @@ sub iteratorValue {
 		$ref = $glob ;
 		}
 
-	return iteratorValue( $ref->[0], $key ) 
-			if isRefType( $ref => 'ARRAY' ) ;
+	return iterator_value( $ref->[0], $key ) 
+			if is_ref_type( $ref => 'ARRAY' ) ;
 	return $ref->{ $key } 
-			if isRefType( $ref => 'HASH' ) ;
+			if is_ref_type( $ref => 'HASH' ) ;
 	return $undef ;
 	}
 
@@ -603,11 +605,11 @@ If the expression fails, nothing is returned.  The error is written into the
 file specified by the I<errorlog> definition in the constructor, or 
 C<< $pen->{errorlog} >>.
 
-=head2 evalError
+=head2 eval_error
 
-C<evalError()> is nearly identical, except it returns any thrown errors.
+C<eval_error()> is nearly identical, except it returns any thrown errors.
 
-=head2 undef
+=head2 _
 
 Many Perl expressions return a value as a side effect.  For example,
 
@@ -625,7 +627,7 @@ The following two lines illustrate alternative solutions that print no
 output:
 
     <: &( $ctr = 0 ; undef )>
-    <: &undef( $ctr = 0 )>
+    <: &_( $ctr = 0 )>
 
 =head2 include
 
@@ -647,9 +649,9 @@ Perl script.
 C<do()> takes an optional boolen as a second argument.  If true, any 
 encountered errors will be returned.
 
-=head2 filePath
+=head2 file_path
 
-C<filePath()> takes a file name as an argument and returns its fully 
+C<file_path()> takes a file name as an argument and returns its fully 
 qualified path, using C<< $pen->{path} >> if necessary.
 
 =head2 comment
@@ -678,11 +680,11 @@ lines and also provides if/then functionality.
     <: &skip(1)>
       Unknown User
 
-=head2 evalLine
+=head2 eval_line
 
 Two commands take the line remainder as part of the argument as shown in these examples:
 
-    <: evalLine()>print "Hello World"
+    <: eval_line()>print "Hello World"
 
 =over 2
 
@@ -698,7 +700,7 @@ C<printf()> returns a line for each element in its array argument,  This
 argument can be a one or two dimensional array.  An example of a two 
 dimesional array:
 
-    <: &undef( @data = ( [ -1 => 'New User' ], [ 1 => 'Jim S' ] ) )>
+    <: &_( @data = ( [ -1 => 'New User' ], [ 1 => 'Jim S' ] ) )>
     <: printf( @data )><select value="%s">%s</select>
 
 =over 2
@@ -731,7 +733,7 @@ C<@BLOCK> consisting of 5 one word lines.  Note each element
 corresponds to a line of text, including the terminating newline.  C<block()> 
 is intended to reuse portions of the file.  Here's a common example:
 
-=head2 displayBlock
+=head2 display_block
 
     <: &block( *BADLOGIN, 'end' )><!--
       <script type="text/javascript">
@@ -739,13 +741,13 @@ is intended to reuse portions of the file.  Here's a common example:
         location.back() ;
       </script>
     end -->
-    <: &is( ! ref $users->{$userid} )><: &displayBlock( @BADLOGIN )>
+    <: &is( ! ref $users->{$userid} )><: &display_block( @BADLOGIN )>
 
 Blocks of HTML and, in particular, Pen HTML, are useful for conditionally 
 displaying content.  The C<iterate()> subroutine is used to display
 a block repeatedly over a data set.
 
-=head2 evalBlock
+=head2 eval_block
 
 There are 3 techniques for representing Perl script in a Pen document.
 
@@ -767,9 +769,9 @@ The last technique is implemented as follows:
       @pages = $doc->pages() ;
     end -->
 
-Use C<evalBlock()> to process a block of script:
+Use C<eval_block()> to process a block of script:
 
-    <: &evalBlock( @PERL )>
+    <: &eval_block( @PERL )>
 
 =head2 script
 
@@ -783,9 +785,9 @@ an argument to the constructor.
       @pages = $doc->pages() ;
     %>
 
-=head2 mailBlock
+=head2 mail_block
 
-Pen makes it easy to send email from a website.  C<mailBlock()>
+Pen makes it easy to send email from a website.  C<mail_block()>
 demonstrates a simple implementation.  The email headers are embedded inside
 the block:
 
@@ -798,22 +800,22 @@ the block:
     <: &include('confirmation.txt')>
     end -->
 
-    <: &mailBlock( @EMAIL )>
+    <: &mail_block( @EMAIL )>
 
 The interpreted block can be piped into any application defined by the
 I<mailprogram> configuration, C<< $env->{mailprogram} >>.
 
-=head2 loadBlock
+=head2 load_block
 
 Mime::Lite is a useful tool for sending email as an HTML attachment.  
-C<loadBlock()> dumps the Pen output into a referenced variable
+C<load_block()> dumps the Pen output into a referenced variable
 instead of printing it to the output stream:
 
     <: &block( *HTML, 'end' )><!--
     <: &include( 'confirmation.htm' )>
     end -->
 
-    <: &loadBlock( \$html, @HTML )>
+    <: &load_block( \$html, @HTML )>
 
 =over
 
@@ -821,7 +823,7 @@ or
 
 =back
 
-    <: &( $html = loadBlock( @HTML ) )>
+    <: &( $html = load_block( @HTML ) )>
 
     <: &( $mime->attach( $html, 'text/html' ) )>
 
@@ -950,12 +952,12 @@ definition.  The solution is for each event object to inherit all the
 properties of its forebears, so that it includes both day and time 
 values.
 
-=head2 iteratorValue
+=head2 iterator_value
 
 The advantage of this approach is that every recursion can access the 
 same property values, regardless of its position in the stack, by 
-calling C<iteratorValue()>.  This subroutine takes the iterator as its 
-first argument, and a property string as its second.  C<iteratorValue()> 
+calling C<iterator_value()>.  This subroutine takes the iterator as its 
+first argument, and a property string as its second.  C<iterator_value()> 
 returns the corresponding value of the bottom-most hash object.
 
 The disadvantage is that every object's properties are replicated across 
@@ -965,10 +967,10 @@ and maintain its descendents in an array reference named I<elements>.  Then
 redefine the scalar before calling C<iterate()>:
 
     <: &comment()><!-- for every block -->
-    <: &undef( $event = $event->{elements} )>
+    <: &_( $event = $event->{elements} )>
     <: &iterate( *event, @CHILDBLOCK )>
 
-Note: C<iteratorValue()> is not extended to cover these more complex
+Note: C<iterator_value()> is not extended to cover these more complex
 data structures.
 
 When C<iterate()> is called, the scalar representation of the iterator 
