@@ -42,7 +42,8 @@ sub new {
 	@fh = () ;
 
 	my $path = shift @_ unless ref $_[0] ;
-	$pen = shift ;
+	$pen = undef ;	## why?
+	( $pen ) = @_ ;
 	$pen ||= {} ;
 	$path ||= $pen->{request} ;
 
@@ -54,8 +55,8 @@ sub new {
 	$pen->{request} ||= $path[1] ;
 	$follow = $pen->{request} ;
 
-	include( $path || $pen->{request} ) ;
-	return bless {}, __PACKAGE__ ;
+        $pen->{error} = 1 if include( $path || $pen->{request}, 0, 1 ) ;
+	return bless $pen, __PACKAGE__ ;
 	}
 
 sub defaultdocs {
@@ -75,8 +76,8 @@ sub fromFQPath {
 	}
 
 sub include {
-	my $fn = shift ;
-	my $skip = @_? shift @_: 0 ;
+	my( $fn, $skip, $err ) = @_ ;
+	$skip ||= 0 ;
 
 	## hopefully something else barks first...
 	return if scalar @fh > 40 ;
@@ -84,7 +85,7 @@ sub include {
 	$fn = filePath( $fn ) ;
 
 	my $fh = new FileHandle pathHack( $fn ) ;
-	return unless defined $fh ;
+	return $err || '' unless defined $fh ;
 	push @fh, $fh ;
 
 	scalar <$fh> while ( $skip-- ) ;
@@ -200,14 +201,16 @@ sub parseLine {
 					sprintf( "&%s( %s )", @t[ 1, 2 ] ):
 					$t[2] ) 
 					if $t[1] || $t[2] ;
+			warn $_ for grep $_, $@ ;
 			}
 		}
 	}
 
 my $evalhead =<<EOF ;
 package HTML::Pen ;
-no strict 'vars' ;
-no strict 'subs' ;
+# no warnings qw( redefine uninitialized ) ;
+no warnings qw( redefine ) ;
+no strict qw( vars subs ) ;
 EOF
 
 sub eval {
@@ -325,12 +328,12 @@ sub block {
 	}
 
 sub evalLine {
-	evalBlock( $T3 ) ;
+	eval( $T3 ) ;
 	return comment() ;
 	}
 
 sub evalline {
-	return evalline( @_ ) ;
+	return evalLine( @_ ) ;
 	}
 
 sub script {
@@ -344,6 +347,7 @@ sub script {
 	}
 
 sub displayBlock {
+        local( $T1, $T2, $T3 ) ;
 	map { parseLine( $_ ) } @_ ;
 	return undef ;
 	}
@@ -471,7 +475,7 @@ sub clear {
 			VERSION ) ;
 	my $cmd = "" ;
 
-	foreach my $v ( values %HTML::Pen:: ) {
+	foreach my $v ( grep ! ref $_, values %HTML::Pen:: ) {
 		next if grep *{ $v }{NAME} eq $_, @protected ;
 
 		my $scalar = *{ $v }{SCALAR} ;
